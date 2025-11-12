@@ -1,5 +1,6 @@
 ﻿using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using TaskManagement.Shared.Configuration;
 
@@ -10,15 +11,19 @@ namespace TaskManagement.Infrastructure.Factories
     /// </summary>
     public class StorageClientFactory : IStorageClientFactory
     {
-        private readonly AzureStorageSettings _settings;
         private readonly BlobServiceClient _blobServiceClient;
         private readonly QueueServiceClient _queueServiceClient;
 
-        public StorageClientFactory(IOptions<AzureStorageSettings> settings)
+        public StorageClientFactory(
+            IConfiguration configuration,
+            IOptions<AzureStorageSettings> settings)
         {
-            _settings = settings.Value;
-            _blobServiceClient = new BlobServiceClient(_settings.ConnectionString);
-            _queueServiceClient = new QueueServiceClient(_settings.ConnectionString);
+            // Try to get from Key Vault first, fallback to settings
+            var connectionString = configuration["StorageConnectionString"]
+                                ?? settings.Value.ConnectionString;
+
+            _blobServiceClient = new BlobServiceClient(connectionString);
+            _queueServiceClient = new QueueServiceClient(connectionString);
         }
 
         public BlobContainerClient CreateBlobContainerClient(string containerName)
