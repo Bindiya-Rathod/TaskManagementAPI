@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using TaskManagement.Core.DTOs;
+using TaskManagement.Core.Exceptions;
 using TaskManagement.Core.Interfaces;
 using TaskManagement.Core.Models;
 
@@ -231,6 +232,47 @@ namespace TaskManagement.Infrastructure.Services
                 DueDate = task.DueDate,
                 CreatedDate = task.CreatedDate
             };
+        }
+        /// <summary>
+        /// Assigns a task to a user with automatic status transition
+        /// </summary>
+        public async Task<TaskResponse> AssignTaskAsync(int taskId, string assignedToUserId)
+        {
+            _logger.LogInformation("Assigning task {TaskId} to user {UserId}", taskId, assignedToUserId);
+
+            try
+            {
+                var task = await _unitOfWork.Tasks.GetTaskByIdAsync(taskId);
+                if (task == null)
+                    throw new TaskNotFoundException($"Task with ID {taskId} not found");
+
+                var oldAssignee = task.AssignedToUserId;
+                task.AssignedToUserId = assignedToUserId;
+
+                if (task.StatusId == 1)
+                    task.StatusId = 2; // New → In Progress
+
+                await _unitOfWork.Tasks.UpdateTaskAsync(taskId, task);
+                await _unitOfWork.SaveChangesAsync();
+
+                await _queueService.SendTaskAssignmentMessageAsync(new
+                {
+                    TaskId = taskId,
+                    AssignedTo = assignedToUserId,
+                    PreviousAssignee = oldAssignee,
+                    Action = "Assigned",
+                    NewStatus = task.StatusId,
+                    Timestamp = DateTime.UtcNow
+                });
+
+                var result = await _unitOfWork.Tasks.GetTaskByIdAsync(taskId);
+                return MapToResponse(result!);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error assigning task");
+                throw;
+            }
         }
     }
 }

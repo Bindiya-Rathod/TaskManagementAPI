@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text;
 using TaskManagement.Core.Interfaces;
 using TaskManagement.Infrastructure.Factories;
 using TaskManagement.Shared.Configuration;
@@ -33,14 +34,17 @@ namespace TaskManagement.Infrastructure.Services
                 var queueClient = _storageFactory.CreateQueueClient(_settings.TaskAssignmentQueue);
                 var messageJson = JsonHelper.Serialize(message);
 
-                _logger.LogInformation("Sending message to queue: {QueueName}", _settings.TaskAssignmentQueue);
-                await queueClient.SendMessageAsync(messageJson);
+                var messageBytes = Encoding.UTF8.GetBytes(messageJson);
+                var messageBase64 = Convert.ToBase64String(messageBytes);
 
-                _logger.LogInformation("Message sent successfully");
+                _logger.LogInformation("Sending message to queue: {QueueName}", _settings.TaskAssignmentQueue);
+                await queueClient.SendMessageAsync(messageBase64);
+
+                _logger.LogInformation("Message sent successfully to queue");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending message to queue");
+                _logger.LogError(ex, "Error sending message to queue: {QueueName}", _settings.TaskAssignmentQueue);
                 throw;
             }
         }

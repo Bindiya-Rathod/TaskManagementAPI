@@ -10,5 +10,6 @@ namespace TaskManagement.Core.Interfaces
         Task<TaskResponse> CreateTaskAsync(CreateTaskRequest request);
         Task<TaskResponse?> UpdateTaskAsync(int taskId, UpdateTaskRequest request);
         Task<bool> DeleteTaskAsync(int taskId);
+        Task<TaskResponse> AssignTaskAsync(int taskId, string assignedToUserId);
     }
 }

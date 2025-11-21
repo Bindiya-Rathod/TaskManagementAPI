@@ -1,8 +1,10 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using TaskManagement.Core.DTOs;
 using TaskManagement.Core.Exceptions;
 using TaskManagement.Core.Interfaces;
 using TaskManagement.Core.Validators;
+using TaskManagement.Shared.Models;
 
 namespace TaskManagement.API.Controllers
 {
@@ -87,10 +89,81 @@ namespace TaskManagement.API.Controllers
         public async Task<ActionResult<IEnumerable<TaskResponse>>> GetTasksByUser(string userId)
         {
             if (string.IsNullOrWhiteSpace(userId))
-                throw new ValidationException("UserId cannot be empty");
+                throw new Core.Exceptions.ValidationException("UserId cannot be empty");
 
             var tasks = await _taskService.GetTasksByUserIdAsync(userId);
             return Ok(tasks);
+        }
+
+        [HttpPut("{id}/assign")]
+        public async Task<ActionResult<TaskResponse>> AssignTask(int id, [FromBody] AssignTaskRequest request)
+        {
+            // Validate using the new validator
+            AssignTaskRequestValidator.Validate(request);
+
+            _logger.LogInformation("AssignTask called for Task {TaskId}, AssignTo {UserId}",
+                                    id, request.AssignedToUserId);
+
+            // Service layer handles all logic + exceptions
+            var updatedTask = await _taskService.AssignTaskAsync(id, request.AssignedToUserId);
+
+            return Ok(updatedTask);
+        }
+
+
+        /// <summary>
+        /// Updates task status (optional - for better API design)
+        /// </summary>
+        [HttpPut("{id}/status")]
+        [ProducesResponseType(typeof(TaskResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateStatusRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new ErrorDetail
+                    {
+                        Code = "INVALID_REQUEST",
+                        Message = "Invalid request data"
+                    });
+                }
+
+                // Use your existing UpdateTaskAsync with partial update
+                var updateRequest = new UpdateTaskRequest
+                {
+                    StatusId = request.StatusId
+                };
+
+                var result = await _taskService.UpdateTaskAsync(id, updateRequest);
+
+                if (result == null)
+                {
+                    return NotFound(new ErrorDetail
+                    {
+                        Code = "TASK_NOT_FOUND",
+                        Message = $"Task with ID {id} not found"
+                    });
+                }
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating task status");
+                return StatusCode(500, new ErrorDetail
+                {
+                    Code = "INTERNAL_ERROR",
+                    Message = "An error occurred while processing your request"
+                });
+            }
+        }
+        public class UpdateStatusRequest
+        {
+            [Required]
+            [Range(1, 5, ErrorMessage = "StatusId must be between 1 and 5")]
+            public int StatusId { get; set; }
         }
     }
 
